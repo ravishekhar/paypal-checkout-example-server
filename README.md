@@ -18,3 +18,58 @@ Then install dependencies and start the local web server:
 npm install
 npm run dev
 ```
+
+```mermaid
+---
+config:
+  theme: neutral,
+  style: {
+    .actor: {
+        fill: yellow;
+    }
+  }
+---
+sequenceDiagram
+  autonumber
+  actor Buyer as Buyer
+  participant MerchantPage as Merchant Page
+  participant PayPalJSSDK as PayPal JS SDK
+  participant PayPalCheckout as PayPal Checkout
+
+  participant MerchantServer as Merchant Server
+  
+  participant PayPalOrdersAPI as PayPal Orders API
+  Note over Buyer, PayPalOrdersAPI: Checkout Process Start
+
+  Buyer ->> MerchantPage: Visits checkout page
+  MerchantPage -->> Buyer: Loads checkout page
+  MerchantPage ->> PayPalJSSDK: init PayPal Button SDK via <script> / React SDK tag
+  MerchantPage ->> MerchantPage: Renders PayPal buttons
+  Buyer ->> MerchantPage: Clicks PayPal button(Start Checkout)
+  PayPalJSSDK ->> MerchantPage: Triggers createOrder callback
+  MerchantPage ->> MerchantServer: Requests to create order
+  MerchantServer ->> PayPalOrdersAPI: POST /v2/checkout/orders
+  PayPalOrdersAPI -->> MerchantServer: Returns Order ID
+  PayPalCheckout -->> MerchantPage: Returns Order ID
+  MerchantPage -->> PayPalJSSDK: Returns Order ID
+
+
+  PayPalJSSDK ->> PayPalCheckout: Launches checkout browser Pop-up with Order ID
+  Buyer ->> PayPalCheckout: Logs in with PayPal credentials
+  Buyer ->> PayPalCheckout: Buyer Selects their shipping address
+  PayPalCheckout ->> MerchantServer : Shipping Address Callback
+  MerchantServer -->> PayPalCheckout : List of Supported Shipping Options
+  Buyer ->> PayPalCheckout: Selects a Shipping Option
+  PayPalCheckout ->> MerchantServer : Shipping Options Callback
+  MerchantServer -->> PayPalCheckout : Updated Cart Information with updated Tax and other info as applicable
+  Buyer ->> PayPalCheckout: Reviews order details
+  Buyer ->> PayPalCheckout: Approves the Transaction
+  PayPalCheckout ->> PayPalJSSDK: Returns to merchant site<br/>with approval data
+  PayPalJSSDK ->> MerchantPage: onApprove callback<br/>sends request to capture payment
+  MerchantPage ->> MerchantServer: Sends request to capture payment
+  MerchantServer ->> PayPalOrdersAPI: Captures payment via<br/>ordersCapture method
+  PayPalOrdersAPI -->> MerchantServer: Returns capture confirmation
+  MerchantServer -->> MerchantPage: Returns payment confirmation
+  MerchantPage -->> Buyer: Displays confirmation message
+  Note over Buyer, PayPalOrdersAPI: Checkout Process Complete, Merchant can Ship the Product to the buyer
+```

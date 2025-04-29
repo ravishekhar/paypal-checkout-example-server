@@ -16,6 +16,12 @@ const {
   PAYPAL_INTENT,
   PAYPAL_API_BASE_URL,
   PAYPAL_WEB_BASE_URL,
+  DEPLOYMENT_ENV_BASE_URL,
+  PAYPAL_ENABLE_SHIPPING_ADDRESS_CALLBACK,
+  PAYPAL_ENABLE_SHIPPING_OPTIONS_CALLBACK,
+  PAYPAL_DEMO_SHIPPING_EMAIL,
+  PAYPAL_DEMO_SHIPPING_PHONE,
+  PAYPAL_DEMO_SHIPPING_COUNTRY_CODE,
 } = process.env;
 
 function getConfig() {
@@ -37,7 +43,17 @@ function getConfig() {
           ? "https://api-m.sandbox.paypal.com"
           : "https://api-m.paypal.com",
       webBaseUrl: PAYPAL_WEB_BASE_URL || "https://www.paypal.com",
+      enableShippingAddressCallback:
+        PAYPAL_ENABLE_SHIPPING_ADDRESS_CALLBACK === "true",
+      enableShippingOptionsCallback:
+        PAYPAL_ENABLE_SHIPPING_OPTIONS_CALLBACK === "true",
+      demo: {
+        shippingEmail: PAYPAL_DEMO_SHIPPING_EMAIL,
+        shippingPhone: PAYPAL_DEMO_SHIPPING_PHONE,
+        shippingCountryCode: PAYPAL_DEMO_SHIPPING_COUNTRY_CODE,
+      },
     },
+    deploymentEnvironmentBaseUrl: String(DEPLOYMENT_ENV_BASE_URL),
   };
 }
 

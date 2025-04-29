@@ -5,16 +5,25 @@ import captureOrder from "../order/capture-order";
 import getOrder from "../order/get-order";
 import products from "../data/products.json";
 import config from "../config";
+import { randomUUID } from "node:crypto";
 
 import type {
   CreateOrderRequestBody,
   OrderResponseBody,
   PurchaseItem,
 } from "@paypal/paypal-js";
-import * as repl from "node:repl";
+import { setOrderCache } from "../cache/orderCache";
 
 const {
-  paypal: { currency, intent, enableOrderCapture },
+  deploymentEnvironmentBaseUrl,
+  paypal: {
+    currency,
+    intent,
+    enableOrderCapture,
+    enableShippingAddressCallback,
+    enableShippingOptionsCallback,
+    demo,
+  },
 } = config;
 
 type CartItem = {
@@ -73,7 +82,7 @@ async function createOrderHandler(
 
   // Example shipping and tax calculation
   const shippingTotal = 0;
-  const taxTotal = roundTwoDecimals(itemTotal * 0.05);
+  const taxTotal = 0;
   const grandTotal = roundTwoDecimals(itemTotal + shippingTotal + taxTotal);
 
   // const invoiceId = "DEMO-INVNUM-" + Date.now(); // An optional transaction field value, use your existing system/business' invoice ID here or generate one sequentially
@@ -83,6 +92,7 @@ async function createOrderHandler(
     intent: intent,
     purchase_units: [
       {
+        reference_id: randomUUID(), // Ideally this needs to be the unique cart identifier / session id maintained in your system.
         amount: {
           currency_code: currency,
           value: String(grandTotal),
@@ -97,29 +107,86 @@ async function createOrderHandler(
               currency_code: currency,
               value: String(taxTotal),
             },
+            shipping: {
+              currency_code: currency,
+              value: String(shippingTotal),
+            },
+            handling: {
+              currency_code: currency,
+              value: String(0),
+            },
+            insurance: {
+              currency_code: currency,
+              value: String(0),
+            },
+            shipping_discount: {
+              currency_code: currency,
+              value: String(0),
+            },
+            discount: {
+              currency_code: currency,
+              value: String(0),
+            },
           },
+        },
+        shipping: {
+          // Thd shipping info has been added to show a demo of UPDATE_CONTACT_INFO
+          // These are optional values, In an ideal scenario merchant can pass these values
+          // if the merchant already has the value.
+          // Else merchant can skip it.
+          ...(demo.shippingEmail &&
+          demo.shippingCountryCode &&
+          demo.shippingPhone
+            ? {
+                email_address: demo.shippingEmail,
+                phone_number: {
+                  country_code: demo.shippingCountryCode,
+                  national_number: demo.shippingPhone,
+                },
+              }
+            : {}),
         },
         items:
           itemsArray /* Line item detail can be seen in the PayPal Checkout by clicking the amount in the upper-right, and is stored in the transaction record */,
 
         /* invoice_id: invoiceId,  /* Your own unique order #, will be indexed and stored as part of the transaction record and searchable in paypal.com account
-                                                                                      (Must be unique, never used for an already *successful* transaction in the receiving account;
-                                                                                      payment attempts with the invoice_id of a previously successful transaction are blocked to prevent accidental repeat payment for same thing) */
+                                                                                              (Must be unique, never used for an already *successful* transaction in the receiving account;
+                                                                                              payment attempts with the invoice_id of a previously successful transaction are blocked to prevent accidental repeat payment for same thing) */
 
         // custom_id: "any-arbitrary-metadata-value",  /* Not indexed nor searchable, but value will be returned in all API or webhook responses and visible in the transaction record of *receiving* PayPal account */
       },
     ],
     payment_source: {
       paypal: {
-        email_address: buyerEmail,
+        ...(buyerEmail ? { email_address: buyerEmail } : {}),
         experience_context: {
+          user_action: "PAY_NOW",
+          shipping_preference: "GET_FROM_FILE",
           return_url: onApproveUrl,
           cancel_url: onCancelUrl,
+          // Refer https://developer.paypal.com/docs/checkout/standard/customize/contact-module/
           contact_preference: "UPDATE_CONTACT_INFO",
+          ...(enableShippingAddressCallback
+            ? {
+                // https://developer.paypal.com/docs/checkout/standard/customize/shipping-module/
+                order_update_callback_config: {
+                  // You can subscribe to only SHIPPING_ADDRESS or both SHIPPING_ADDRESS and SHIPPING_OPTIONS based on your business needs
+                  callback_events: enableShippingOptionsCallback
+                    ? ["SHIPPING_ADDRESS", "SHIPPING_OPTIONS"]
+                    : ["SHIPPING_ADDRESS"],
+                  callback_url: new URL(
+                    "/api/shipping-callback",
+                    deploymentEnvironmentBaseUrl
+                  ).href,
+                },
+              }
+            : {}),
         },
       },
     },
-  } as CreateOrderRequestBody; //cast needed for payment_source.paypal with paypal-js@5.1.4
+  } as unknown as CreateOrderRequestBody; //cast needed for payment_source.paypal with paypal-js@5.1.4 as this version's type is not upto date
+
+  console.log("Create Order Payload", JSON.stringify(orderPayload));
 
   const orderResponse = await createOrder({
     body: orderPayload,
@@ -132,6 +199,9 @@ async function createOrderHandler(
   } else {
     request.log.error(orderResponse.data, "failed to create order");
   }
+
+  const token = orderResponse.data.id;
+  setOrderCache(String(token), orderPayload);
 
   reply
     .code(orderResponse.httpStatusCode as number)
@@ -185,7 +255,7 @@ export async function createOrderController(fastify: FastifyInstance) {
     schema: {
       body: {
         type: "object",
-        required: ["cart", "buyerEmail", "onApproveUrl", "onCancelUrl"],
+        required: ["cart", "onApproveUrl", "onCancelUrl"],
         properties: {
           cart: {
             type: "array",
@@ -243,7 +313,10 @@ export async function getOrderController(fastify: FastifyInstance) {
     handler: getOrderHandler,
     schema: {
       querystring: {
-        orderID: { type: "string" },
+        type: "object",
+        properties: {
+          orderID: { type: "string" },
+        },
       },
     },
   });

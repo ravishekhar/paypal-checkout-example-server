@@ -1,6 +1,6 @@
 import { fetch } from "undici";
 import config from "../config";
-import Cache from "./cache";
+import Cache from "../cache";
 
 const {
   paypal: { clientID, clientSecret, apiBaseUrl },
