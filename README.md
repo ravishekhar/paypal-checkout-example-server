@@ -43,14 +43,14 @@ sequenceDiagram
 
   Buyer ->> MerchantPage: Visits checkout page
   MerchantPage -->> Buyer: Loads checkout page
-  MerchantPage ->> PayPalJSSDK: init PayPal Button SDK via <script> / React SDK tag
+  MerchantPage ->> PayPalJSSDK: init PayPal Button SDK via <script> tag / React SDK
   MerchantPage ->> MerchantPage: Renders PayPal buttons
   Buyer ->> MerchantPage: Clicks PayPal button(Start Checkout)
   PayPalJSSDK ->> MerchantPage: Triggers createOrder callback
   MerchantPage ->> MerchantServer: Requests to create order
   MerchantServer ->> PayPalOrdersAPI: POST /v2/checkout/orders
   PayPalOrdersAPI -->> MerchantServer: Returns Order ID
-  PayPalCheckout -->> MerchantPage: Returns Order ID
+  MerchantServer -->> MerchantPage: Returns Order ID
   MerchantPage -->> PayPalJSSDK: Returns Order ID
 
 
